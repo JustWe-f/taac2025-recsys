@@ -605,6 +605,15 @@ def save_emb(emb, save_path):
         emb.tofile(f)
 
 
+
+def load_fbin(path):
+    """Load embedding from fbin format (header: num_points, num_dimensions, then float32 data)"""
+    with open(str(path), 'rb') as f:
+        num_points, num_dimensions = struct.unpack('II', f.read(8))
+        data = np.fromfile(f, dtype=np.float32, count=num_points * num_dimensions)
+        return data.reshape(num_points, num_dimensions)
+
+
 def load_mm_emb(mm_path, feat_ids):
     """
     加载多模态特征Embedding
@@ -713,10 +722,10 @@ def load_seq_as_list(seq_dir, batch_size=100000):
             flat_structs = seqs.values
 
             batch_events = np.empty(len(flat_structs), dtype=event_type)
-            
-            batch_events['item_id'] = flat_structs.field('item_id').to_numpy()
-            batch_events['action_type'] = flat_structs.field('action_type').to_numpy()
-            batch_events['timestamp'] = flat_structs.field('timestamp').to_numpy()
+
+            batch_events['item_id'] = flat_structs.field('item_id').fill_null(0).to_numpy(zero_copy_only=False)
+            batch_events['action_type'] = flat_structs.field('action_type').fill_null(0).to_numpy(zero_copy_only=False)
+            batch_events['timestamp'] = flat_structs.field('timestamp').fill_null(0).to_numpy(zero_copy_only=False)
 
             all_events_list.append(batch_events)
 

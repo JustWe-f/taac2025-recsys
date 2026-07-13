@@ -39,11 +39,11 @@ def delete_all_except(directory, exclude_file):
 if __name__ == '__main__':
 
     # os.environ['EVAL_RESULT_PATH'] = '/apdcephfs_szgm/share_303492287/ryanylsun/TencentGR/competition_test/python/results'
-    os.environ['EVAL_RESULT_PATH'] = '/apdcephfs_szgm/share_303492287/ryanylsun/TencentGR/competition_test/python/epoch2_results'
+    os.environ['EVAL_RESULT_PATH'] = r'D:/Desktop/GR/taac2025-recsys/results'
 
-    os.environ['EVAL_DATA_PATH'] = '/apdcephfs_szgm/share_303492287/ryanylsun/TencentGR/second/second'
+    os.environ['EVAL_DATA_PATH'] = r'D:/taac2025-data'
     
-    os.environ["MODEL_OUTPUT_PATH"] = "/apdcephfs_szgm/share_303492287/ryanylsun/TencentGR/competition_test/python/checkpoints/global_step35648.valid_loss=0.0959"
+    os.environ["MODEL_OUTPUT_PATH"] = r"D:/Desktop/GR/taac2025-recsys/checkpoints/20260713_182135/global_step441.valid_loss=0.2887"
     # os.environ['EVAL_RESULT_PATH'] = '/apdcephfs_szgm/share_303492287/ryanylsun/TencentGR/competition_test/python/epoch1_results'
 
     os.makedirs(os.environ.get('EVAL_RESULT_PATH'), exist_ok=True)

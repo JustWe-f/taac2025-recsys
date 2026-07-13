@@ -100,7 +100,7 @@ def get_candidate_emb_parquet(indexer, feat_types, feat_default_value, mm_emb_di
 
     item_feature_ids = ['100', '101', '102', '112', '114', '115', '116', '117', '118', '119', '120', '121', '122']
 
-    scanner = candidates.scanner(columns=['creative_id', 'reid_creative_id', 'retrieval_id', *item_feature_ids], batch_size=100000)
+    scanner = candidates.scanner(columns=['item_id', 'retrieval_id', *item_feature_ids], batch_size=100000)
 
     total_rows = candidates.count_rows()
     print(f"all the candidates rows: {total_rows}")
@@ -112,14 +112,14 @@ def get_candidate_emb_parquet(indexer, feat_types, feat_default_value, mm_emb_di
 
         for batch in scanner.to_batches():
             
-            creative_ids = batch.column('creative_id')
+            item_ids_col = batch.column('item_id')
             retrieval_ids = batch.column('retrieval_id') 
 
             for i in range(len(batch)):
                 feature = {}
-                creative_id = creative_ids[i].as_py()
+                item_id_raw = item_ids_col[i].as_py()
                 retrieval_id = retrieval_ids[i].as_py() 
-                item_id = indexer[creative_id] if creative_id in indexer else 0
+                item_id = indexer[item_id_raw] if item_id_raw in indexer else 0
 
                 missing_fields = set(
                     feat_types['item_sparse'] + feat_types['item_array'] + feat_types['item_continual']
@@ -130,19 +130,34 @@ def get_candidate_emb_parquet(indexer, feat_types, feat_default_value, mm_emb_di
                 # process cold start:
                 for feat_id in item_feature_ids:
                     feat_id_dict = batch.column(feat_id)[i].as_py()
-                    feature[feat_id] = int(feat_id_dict['feature_value']) if feat_id_dict['is_str'] == 0 else 0
+                    fv = feat_id_dict['feature_value']
+                    try:
+                        val = int(fv) if fv is not None else 0
+                    except (ValueError, TypeError):
+                        val = 0
+                    feature[feat_id] = val
+
+                # Clamp feature values to embedding table bounds
+                for fid in feat_types.get('item_sparse', []):
+                    if fid in feature and isinstance(feature[fid], int):
+                        max_val = model.ITEM_SPARSE_FEAT.get(fid, 999999)
+                        feature[fid] = max(0, min(feature[fid], max_val))
+                for fid in feat_types.get('item_array', []):
+                    if fid in feature and isinstance(feature[fid], list):
+                        max_val = model.ITEM_ARRAY_FEAT.get(fid, 999999)
+                        feature[fid] = [max(0, min(v, max_val)) if isinstance(v, int) else v for v in feature[fid]]
 
                 for feat_id in feat_types['item_emb']:
-                    if creative_id in mm_emb_dict[feat_id]:
-                        feature[feat_id] = mm_emb_dict[feat_id][creative_id]
+                    if item_id_raw in mm_emb_dict[feat_id]:
+                        feature[feat_id] = mm_emb_dict[feat_id][item_id_raw]
                     else:
                         feature[feat_id] = np.zeros(EMB_SHAPE_DICT[feat_id], dtype=np.float32)
 
                 item_ids.append(item_id)
-                record_creative_ids.append(creative_id)
+                record_creative_ids.append(item_id_raw)
                 record_retrieval_ids.append(retrieval_id)
                 features.append(feature)
-                retrieve_id2creative_id[retrieval_id] = creative_id
+                retrieve_id2creative_id[retrieval_id] = item_id_raw
 
             pbar.update(batch.num_rows)
 
@@ -187,7 +202,7 @@ def get_candidate_emb(indexer, feat_types, feat_default_value, mm_emb_dict, mode
             feature = line['features']
             creative_id = line['creative_id']
             retrieval_id = line['retrieval_id']
-            item_id = indexer[creative_id] if creative_id in indexer else 0
+            item_id = indexer[item_id_raw] if item_id_raw in indexer else 0
             missing_fields = set(
                 feat_types['item_sparse'] + feat_types['item_array'] + feat_types['item_continual']
             ) - set(feature.keys())
@@ -195,8 +210,8 @@ def get_candidate_emb(indexer, feat_types, feat_default_value, mm_emb_dict, mode
             for feat_id in missing_fields:
                 feature[feat_id] = feat_default_value[feat_id]
             for feat_id in feat_types['item_emb']:
-                if creative_id in mm_emb_dict[feat_id]:
-                    feature[feat_id] = mm_emb_dict[feat_id][creative_id]
+                if item_id_raw in mm_emb_dict[feat_id]:
+                    feature[feat_id] = mm_emb_dict[feat_id][item_id_raw]
                 else:
                     feature[feat_id] = np.zeros(EMB_SHAPE_DICT[feat_id], dtype=np.float32)
 
@@ -204,7 +219,7 @@ def get_candidate_emb(indexer, feat_types, feat_default_value, mm_emb_dict, mode
             creative_ids.append(creative_id)
             retrieval_ids.append(retrieval_id)
             features.append(feature)
-            retrieve_id2creative_id[retrieval_id] = creative_id
+            retrieve_id2creative_id[retrieval_id] = item_id_raw
 
     # 保存候选库的embedding和sid
     model.save_item_emb(item_ids, retrieval_ids, features, os.environ.get('EVAL_RESULT_PATH'))
@@ -221,7 +236,7 @@ def infer():
     test_dataset = MyTestDataset(data_path, args)
 
     test_loader = DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, collate_fn=test_dataset.collate_fn
+        test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0, collate_fn=test_dataset.collate_fn
     )
 
     usernum, itemnum = test_dataset.usernum, test_dataset.itemnum
@@ -270,25 +285,33 @@ def infer():
     save_emb(all_embs, Path(os.environ.get('EVAL_RESULT_PATH'), 'query.fbin'))
 
 
-    print("Enter ANN Search")
+    print("Enter ANN Search (Faiss Python)")
 
-    # ANN 检索
-    ann_cmd = (
-        str(Path("/apdcephfs_szgm/share_303492287/ryanylsun/TencentGR/competition_test/python", "faiss-based-ann", "faiss_demo"))
-        + " --dataset_vector_file_path="
-        + str(Path(os.environ.get("EVAL_RESULT_PATH"), "embedding.fbin"))
-        + " --dataset_id_file_path="
-        + str(Path(os.environ.get("EVAL_RESULT_PATH"), "id.u64bin"))
-        + " --query_vector_file_path="
-        + str(Path(os.environ.get("EVAL_RESULT_PATH"), "query.fbin"))
-        + " --result_id_file_path="
-        + str(Path(os.environ.get("EVAL_RESULT_PATH"), "id100.u64bin"))
-        + " --query_ann_top_k=10 --faiss_M=64 --faiss_ef_construction=1280 --query_ef_search=640 --faiss_metric_type=0"
-    )
-    os.system(ann_cmd)
+    # ---- Faiss ANN (replaces C++ binary) ----
+    import faiss
+    from dataset import load_fbin
 
-    # 取出top-k
-    top10s_retrieved = read_result_ids(Path(os.environ.get("EVAL_RESULT_PATH"), "id100.u64bin"))
+    result_path = Path(os.environ.get('EVAL_RESULT_PATH'))
+    item_embs, item_ids_arr = load_fbin(result_path / 'embedding.fbin'), None
+    # Load item retrieval IDs
+    with open(result_path / 'id.u64bin', 'rb') as f:
+        n_items, _ = struct.unpack('II', f.read(8))
+        item_retrieval_ids = np.fromfile(f, dtype=np.uint64, count=n_items)
+
+    query_embs = load_fbin(result_path / 'query.fbin')
+    dim = item_embs.shape[1]
+
+    # Build HNSW index
+    index = faiss.IndexHNSWFlat(dim, 64)
+    index.hnsw.efConstruction = 1280
+    index.hnsw.efSearch = 640
+    index.add(item_embs.astype(np.float32))
+
+    top_k = 10
+    _, I = index.search(query_embs.astype(np.float32), top_k)
+    # I shape: (num_queries, top_k), values are indices into item_retrieval_ids
+    top10s_retrieved = item_retrieval_ids[I]  # (num_queries, top_k) retrieval IDs
+    print(f"ANN search done: {I.shape}")
     top10s_untrimmed = []
     for top10 in tqdm(top10s_retrieved):
         for item in top10:

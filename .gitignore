@@ -17,14 +17,22 @@ data/*
 # Model checkpoints (ignore contents, keep directory)
 experiments/checkpoints/*
 !experiments/checkpoints/.gitkeep
+checkpoints/
 *.pt
 *.pth
+
+# Results
+results/
+result.json
 
 # Logs (ignore contents, keep directory)
 experiments/logs/*
 !experiments/logs/.gitkeep
 runs/
+tf_events/
 *.log
+infer_output*.txt
+training_output*.txt
 
 # IDE
 .idea/
@@ -45,4 +53,3 @@ reference/*
 
 # Misc
 *.tmp
-result.json

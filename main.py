@@ -123,7 +123,7 @@ if __name__ == '__main__':
     os.environ["TRAIN_TF_EVENTS_PATH"] = f"./tf_events/{run_id}"
     os.environ["TRAIN_CKPT_PATH"] = f"./checkpoints/{run_id}"
     # global dataset
-    os.environ["TRAIN_DATA_PATH"] = "/apdcephfs_szgm/share_303492287/ryanylsun/TencentGR/second/second"
+    os.environ["TRAIN_DATA_PATH"] = "D:/taac2025-data"
 
     Path(os.environ.get('TRAIN_LOG_PATH')).mkdir(parents=True, exist_ok=True)
     Path(os.environ.get('TRAIN_TF_EVENTS_PATH')).mkdir(parents=True, exist_ok=True)
@@ -138,10 +138,10 @@ if __name__ == '__main__':
     dataset = MyDataset(data_path, args)
     train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [0.9, 0.1])
     train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=16, collate_fn=dataset.collate_fn, pin_memory=True
+        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, collate_fn=dataset.collate_fn, pin_memory=True
     )
     valid_loader = DataLoader(
-        valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, collate_fn=dataset.collate_fn
+        valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0, collate_fn=dataset.collate_fn
     )
     usernum, itemnum = dataset.usernum, dataset.itemnum
     feat_statistics, feat_types = dataset.feat_statistics, dataset.feature_types
