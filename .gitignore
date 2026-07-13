@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Data
+data/*
+!data/.gitkeep
+*.parquet
+*.pkl
+*.fbin
+*.u64bin
+
+# Model checkpoints (ignore contents, keep directory)
+experiments/checkpoints/*
+!experiments/checkpoints/.gitkeep
+*.pt
+*.pth
+
+# Logs (ignore contents, keep directory)
+experiments/logs/*
+!experiments/logs/.gitkeep
+runs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Reference (keep structure, ignore cloned repo contents)
+reference/*
+!reference/.gitignore
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Misc
+*.tmp
+result.json
